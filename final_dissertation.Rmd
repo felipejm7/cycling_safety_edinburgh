@@ -1,0 +1,162 @@
+---
+title: "Transport Dissertation"
+subtitle: "Cycling safety represented in two cycleways of the City of Edinburgh through geocomputation methods"
+output:
+ pdf_document:
+   number_sections: true
+#output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r, eval=FALSE}
+install.packages("remotes")
+remotes::install_github("nptscot/osmactive")
+remotes::install_dev("tmap")
+remotes::install_cran("zonebuilder")
+library(osmactive) # cycle network data
+library(dplyr) # data processing functions
+library(stats19) # crash data
+library(sf) # spatial data
+library(tmap) # map making
+```
+
+
+```{r, eval=FALSE}
+# Define the boundary
+edinburgh_zones = zonebuilder::zb_zone("Edinburgh")
+edinburgh_6km = edinburgh_zones |>
+  filter(circle_id %in% (1:3))
+edinburgh_6km_boundary = edinburgh_6km |>
+ sf::st_union()
+plot(edinburgh_6km_boundary)
+```
+
+```{r, eval=FALSE}
+# Get some network data
+osm = osmactive::get_travel_network(place = "Scotland", 
+                                    boundary = edinburgh_6km_boundary, 
+                                    boundary_type = "clipsrc")
+plot(osm$geometry)
+```
+
+```{r, eval=FALSE}
+# Create a GIS file with cycle infrastructure classification
+cycle_net = get_cycling_network(osm)
+drive_net = get_driving_network_major(osm)
+cycle_net = distance_to_road(cycle_net, drive_net)
+cycle_net = classify_cycle_infrastructure(cycle_net)
+sf::write_sf(cycle_net, "cycle_net.gpkg")
+```
+
+#Get road casualty data
+
+```{r, eval=FALSE}
+load("old_data")
+# Get crash data from 1979 onwards
+cas = get_stats19(year = "1979", type = "cas")
+col = get_stats19(year = "1979", type = "col")
+
+# Filter years before A700 improvement (2008 to 2012)
+cas_08_12 = cas |> 
+  dplyr::filter(accident_year >= 2008) |>
+  dplyr::filter(accident_year <= 2012)
+col_08_12 = col |> 
+  dplyr::filter(accident_year >= 2008) |>
+  dplyr::filter(accident_year <= 2012)
+
+# Filter years after A700 improvement (2013 to 2017)
+cas_13_17 = cas |> 
+  dplyr::filter(accident_year >= 2013) |>
+  dplyr::filter(accident_year <= 2017)
+col_13_17 = col |> 
+  dplyr::filter(accident_year >= 2013) |>
+  dplyr::filter(accident_year <= 2017)
+
+# Identify in the table
+names(col_08_12)
+table(col_08_12$police_force)
+names(cas_08_12)
+table(cas_08_12$lsoa_of_casualty)
+
+# Filter the crash data to Edinburgh
+# Filter to Scotland
+col_08_12_scot = col_08_12 |> 
+  filter(str_detect(police_force, "Lothian"))
+col_13_17_scot = col_13_17 |> 
+  filter(str_detect(police_force, "Lothian"))
+
+# Filter collisions to cyclists
+cas_08_12_scot = cas_08_12 |> 
+  filter(accident_index %in% col_08_12_scot$accident_index)
+cas_08_12_scot_cyc = cas_08_12_scot |>
+  select(accident_index, casualty_type) |>
+  group_by(accident_index) |>
+  summarise(cycling = sum(casualty_type=="Cyclist"))
+
+cas_13_17_scot = cas_13_17 |> 
+  filter(accident_index %in% col_13_17_scot$accident_index)
+cas_13_17_scot_cyc = cas_13_17_scot |>
+  select(accident_index, casualty_type) |>
+  group_by(accident_index) |>
+  summarise(cycling = sum(casualty_type=="Cyclist"))
+
+# Convert collision to sf object to do spatial join
+
+col_08_12_scot_sf = format_sf(col_08_12_scot, lonlat)
+col_13_17_scot_sf = format_sf(col_13_17_scot, lonlat = TRUE)
+
+# Now spatial filters can be done
+
+col_edinburgh_08_12 = col_08_12_scot_sf[edinburgh_6km_boundary,]
+col_edinburgh_13_17 = col_13_17_scot_sf[edinburgh_6km_boundary,]
+
+```
+
+Now, collisions and casualties can be joined so each collision includes number of cycling casualties:
+
+```{r, eval=FALSE}
+# Join collisions and cycling casualties
+col_cas_joined_08_12 = left_join(col_edinburgh_08_12, cas_08_12_scot_cyc)
+col_cas_joined_13_17 = left_join(col_edinburgh_13_17, cas_13_17_scot_cyc)
+```
+
+
+```{r, eval=FALSE}
+
+# Filter collisions without cycling casualties
+col_cyc_08_12 = col_cas_joined_08_12 |>
+  dplyr::filter(cycling > 0)
+
+col_cyc_13_17 = col_cas_joined_13_17 |>
+  dplyr::filter(cycling > 0)
+
+```
+
+```{r, eval=FALSE}
+# Convert the results into a GIS file
+sf::write_sf(col_cyc_08_12, "col_cycle_edinburgh_08_12.gpkg")
+sf::write_sf(col_cyc_13_17, "col_cycle_edinburgh_13_17.gpkg")
+```
+
+To remove data already used (only if need to get rid of a data file):
+```{r, eval=FALSE}
+file.remove("old_data")
+```
+
+
+# TWO_CYCLEWAYS_CRASH_VIS
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of TWO_CYCLEWAYS_CRASH_VIS is to ...
+
+
