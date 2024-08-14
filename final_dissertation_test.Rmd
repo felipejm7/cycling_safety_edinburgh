@@ -1,0 +1,132 @@
+---
+title: "Transport Dissertation"
+subtitle: "Cycling safety represented in two cycleways of the City of Edinburgh through geocomputation methods - Methodology test in London"
+output:
+ pdf_document:
+   number_sections: true
+#output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r, eval=FALSE}
+install.packages("remotes")
+remotes::install_cran("zonebuilder")
+library(osmactive) # cycle network data
+library(tidyverse) # data processing and presentation functions
+library(stats19) # crash data
+library(sf) # spatial data
+```
+
+
+```{r, eval=FALSE}
+# Define the boundary
+london_zones = zonebuilder::zb_zone("London")
+london_6km = london_zones |>
+  filter(circle_id %in% (1:3))
+london_6km_boundary = london_6km |>
+ sf::st_union()
+plot(london_6km_boundary)
+```
+
+#Get road casualty data
+
+```{r, eval=FALSE}
+
+# Get crash data from 1979 onwards
+cas = get_stats19(year = "1979", type = "cas")
+col = get_stats19(year = "1979", type = "col")
+
+# Filter years before A201 cycle path (2011 to 2015)
+cas_11_15 = cas |> 
+  dplyr::filter(accident_year >= 2011) |>
+  dplyr::filter(accident_year <= 2015)
+col_11_15 = col |> 
+  dplyr::filter(accident_year >= 2011) |>
+  dplyr::filter(accident_year <= 2015)
+
+# Filter years after A201 cycle path (2016 to 2020)
+cas_16_20 = cas |> 
+  dplyr::filter(accident_year >= 2016) |>
+  dplyr::filter(accident_year <= 2020)
+col_16_20 = col |> 
+  dplyr::filter(accident_year >= 2016) |>
+  dplyr::filter(accident_year <= 2020)
+
+# Identify in the table
+names(col_11_15)
+table(col_11_15$police_force)
+names(cas_11_15)
+table(cas_11_15$lsoa_of_casualty)
+
+# Filter the crash data to London
+col_11_15_london = col_11_15 |> 
+  filter(str_detect(police_force, "City of London|Metropolitan Police"))
+col_16_20_london = col_16_20 |> 
+  filter(str_detect(police_force, "City of London|Metropolitan Police"))
+
+# Filter collisions to cyclists
+cas_11_15_london = cas_11_15 |> 
+  filter(accident_index %in% col_11_15_london$accident_index)
+cas_11_15_london_cyc = cas_11_15_london |>
+  select(accident_index, casualty_type) |>
+  group_by(accident_index) |>
+  summarise(cycling = sum(casualty_type=="Cyclist"))
+
+cas_16_20_london = cas_16_20 |> 
+  filter(accident_index %in% col_16_20_london$accident_index)
+cas_16_20_london_cyc = cas_16_20_london |>
+  select(accident_index, casualty_type) |>
+  group_by(accident_index) |>
+  summarise(cycling = sum(casualty_type=="Cyclist"))
+
+# Convert collision to sf object to do spatial join
+
+col_11_15_london_sf = format_sf(col_11_15_london, lonlat = TRUE)
+col_16_20_london_sf = format_sf(col_16_20_london, lonlat = TRUE)
+
+# Now spatial filters can be done
+
+col_citylondon_11_15 = col_11_15_london_sf[london_6km_boundary,]
+col_citylondon_16_20 = col_16_20_london_sf[london_6km_boundary,]
+
+```
+
+Now, collisions and casualties can be joined so each collision includes number of cycling casualties:
+
+```{r, eval=FALSE}
+# Join collisions and cycling casualties
+col_cas_joined_11_15 = left_join(col_citylondon_11_15, cas_11_15_london_cyc)
+col_cas_joined_16_20 = left_join(col_citylondon_16_20, cas_16_20_london_cyc)
+```
+
+
+```{r, eval=FALSE}
+
+# Filter collisions without cycling casualties
+col_cyc_11_15 = col_cas_joined_11_15 |>
+  dplyr::filter(cycling > 0)
+
+col_cyc_16_20 = col_cas_joined_16_20 |>
+  dplyr::filter(cycling > 0)
+
+```
+
+```{r, eval=FALSE}
+# Convert the results into a GIS file
+sf::write_sf(col_cyc_11_15, "col_cycle_london_11_15.gpkg")
+sf::write_sf(col_cyc_16_20, "col_cycle_london_16_20.gpkg")
+```
+
+
+
+
+
+
