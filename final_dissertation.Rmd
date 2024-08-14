@@ -19,13 +19,11 @@ knitr::opts_chunk$set(
 ```{r, eval=FALSE}
 install.packages("remotes")
 remotes::install_github("nptscot/osmactive")
-remotes::install_dev("tmap")
 remotes::install_cran("zonebuilder")
 library(osmactive) # cycle network data
-library(dplyr) # data processing functions
+library(tidyverse) # data processing and presentation functions
 library(stats19) # crash data
 library(sf) # spatial data
-library(tmap) # map making
 ```
 
 
